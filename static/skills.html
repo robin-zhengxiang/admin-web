@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>admin-web · skills</title>
+<link rel="stylesheet" href="/dashboard.css">
+</head>
+<body>
+<div class="topbar">
+  <nav>
+    <a href="/">看板</a>
+    <a href="/skills" class="active">skills</a>
+    <a href="/tasks">tasks</a>
+  </nav>
+  <div>
+    <span id="whoami"></span>
+    <a id="logout" href="#">登出</a>
+  </div>
+</div>
+
+<main>
+  <div class="card">
+    <h2>本机 Skills</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>名字</th>
+          <th>所属用户</th>
+          <th>description</th>
+          <th>状态</th>
+          <th>编辑</th>
+        </tr>
+      </thead>
+      <tbody id="skill-rows"></tbody>
+    </table>
+  </div>
+</main>
+
+<div id="detail-overlay"></div>
+<div id="detail-panel" style="display:none"></div>
+
+<script src="/skills.js"></script>
+</body>
+</html>

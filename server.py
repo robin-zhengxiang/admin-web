@@ -5,6 +5,7 @@ import traceback
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
+import api_skills  # noqa: F401 (registers /api/skills routes)
 import api_tokens  # noqa: F401 (registers /api/overview, /api/sessions routes)
 import auth
 import db
