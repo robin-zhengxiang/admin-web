@@ -1,6 +1,8 @@
 import json
 import mimetypes
 import os
+import subprocess
+import threading
 import traceback
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -16,7 +18,49 @@ from routes import ROUTES, ApiError, ResponseHelper, route
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-HOST = "127.0.0.1"
+
+
+def _detect_vpn_ip():
+    """This machine's Tailscale IP (100.64.0.0/10 CGNAT range), if connected.
+
+    We bind to this specific address rather than 0.0.0.0 so the admin panel
+    (which can toggle skills, control launchd tasks, and drives an
+    autonomous code-editing feedback loop) is reachable from the VPN without
+    also being exposed on every other network this laptop happens to join
+    (home wifi, public wifi, ...). Falls back to loopback-only if the VPN
+    isn't up.
+    """
+    try:
+        out = subprocess.run(["ifconfig"], capture_output=True, text=True, timeout=3).stdout
+    except Exception:
+        return None
+    for line in out.splitlines():
+        line = line.strip()
+        if not line.startswith("inet "):
+            continue
+        ip = line.split()[1]
+        octets = ip.split(".")
+        if len(octets) != 4:
+            continue
+        try:
+            octets = [int(o) for o in octets]
+        except ValueError:
+            continue
+        if octets[0] == 100 and 64 <= octets[1] <= 127:
+            return ip
+    return None
+
+
+def _bind_hosts():
+    """Always loopback (so the person sitting at this Mac keeps working), plus the
+    VPN IP if connected (so VPN peers can reach it too) — never 0.0.0.0."""
+    hosts = ["127.0.0.1"]
+    vpn_ip = _detect_vpn_ip()
+    if vpn_ip:
+        hosts.append(vpn_ip)
+    return hosts
+
+
 PORT = 8000
 
 CLEAN_URLS = {
@@ -132,12 +176,21 @@ def health(match, query, body, session, resp):
 def main():
     db.init_db()
     db.start_indexer_thread()
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"admin-web listening on http://{HOST}:{PORT}")
+
+    servers = []
+    for host in _bind_hosts():
+        server = ThreadingHTTPServer((host, PORT), Handler)
+        servers.append(server)
+        print(f"admin-web listening on http://{host}:{PORT}")
+
+    background = [threading.Thread(target=s.serve_forever, daemon=True) for s in servers[1:]]
+    for t in background:
+        t.start()
     try:
-        server.serve_forever()
+        servers[0].serve_forever()
     except KeyboardInterrupt:
-        server.shutdown()
+        for s in servers:
+            s.shutdown()
 
 
 if __name__ == "__main__":
