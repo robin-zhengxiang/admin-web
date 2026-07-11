@@ -5,6 +5,7 @@ import traceback
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
+import api_feedback  # noqa: F401 (registers /api/feedback routes)
 import api_skills  # noqa: F401 (registers /api/skills routes)
 import api_tasks  # noqa: F401 (registers /api/tasks routes)
 import api_tokens  # noqa: F401 (registers /api/overview, /api/sessions routes)
@@ -23,6 +24,7 @@ CLEAN_URLS = {
     "/login": "/login.html",
     "/skills": "/skills.html",
     "/tasks": "/tasks.html",
+    "/feedback": "/feedback.html",
 }
 
 
