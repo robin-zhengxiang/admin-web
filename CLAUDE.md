@@ -39,6 +39,8 @@ static/         每个页面一个 html+js；dashboard.css 是全站共用样式
 
 **`#detail-overlay` / `#detail-panel` 的 z-index**（session 详情、skill 编辑器、task 日志、feedback 对话线程共用同一套弹层组件）：`#detail-overlay` 设了 `z-index: 10`，但 `#detail-panel` 原来没设 z-index（默认 `auto`）——按 CSS 层叠规则，`auto`/`0` 层叠上下文早于正数 z-index 绘制，所以哪怕 `#detail-panel` 在 DOM 里排在后面，视觉上"看起来在前面"，实际点击/拖选事件全被 `#detail-overlay` 挡在上层截胡了。表现就是：面板里的 textarea 点不进去、选不了文字、复制不了——四个功能模块（看板/skills/tasks/feedback）用的是同一个弹层组件，所以这个 bug 一次性影响了全部详情页。修复：给 `#detail-panel` 显式设 `z-index: 11`（比 overlay 高）+ `user-select: text`。**以后凡是新加一个用到 `#detail-overlay`+`#detail-panel` 的弹层，都要确认面板的 z-index 高于 overlay**，这类"看起来对但点不动"的问题很容易被当成 JS bug 去排查，其实是纯 CSS 层叠问题。
 
+**`os.path.expanduser("~/...")` 在 root 进程里指向的是 root 的家目录，不是 robinzheng 的**：`api_tasks.py`（`TASKCTL_DIR`、task 日志路径展开）和 `feedback_scanner.py`（`DINGTALK_DIR`、`_EXTRA_PATHS`）都要引用 robinzheng 自己的 `task-manager`/`dingtalk-notify`，这两个集成本来就是"这个特定管理员用户的"，不是按登录身份变的。已经全部改成 `os.path.expanduser("~robinzheng/...")`（**指名用户**的写法）——这个语法不看进程自己的 HOME/uid，会直接查密码库里 `robinzheng` 这个账户的家目录，所以不管这个进程是 robinzheng 跑的还是 root 跑的，结果都对。新代码里凡是要引用"robinzheng 自己的东西"（不是某个 owner_user 参数化出来的路径），都用这个写法，别写裸 `~`。
+
 ## 路由约定（写新 API 时follow这个）
 
 ```python
@@ -78,6 +80,8 @@ def handler(match, query, body, session, resp):
 复现验证方式：`cp -r ~/admin-web /tmp/xxx` 到一个独立目录，在那个副本里跑，不要在真实仓库上做这种实验（see `tests/test_feedback_scanner.py` 已经把这个场景写成自动化测试了）。
 
 工具权限复用自 `~/.claude/skills/dingtalk-notify/headless.py`（`ALLOWED_TOOLS`/`DISALLOWED_TOOLS`，挡住 `git push`/`sudo`/`launchctl`/`rm`/`chmod`/`chown` 等）和 `headless_session.py` 的订阅 OAuth 环境变量模式（不注入 `ANTHROPIC_API_KEY`，走 Claude Code 自己的订阅登录）。
+
+**这个脚本必须以 robinzheng 身份跑，不能纳入 root LaunchDaemon**：它调用的 `claude` CLI 走的是 robinzheng 自己 `claude login` 过的订阅登录态（存在 robinzheng 的 keychain/配置里），root 进程读不到这份登录态。所以即便 `server.py` 本体切成了 root LaunchDaemon，`feedback_scanner.py` 将来注册定时任务时也必须是独立的、以 robinzheng 身份跑的 `scheduled` 任务，不能塞进那个 root daemon 里。
 
 ## 测试
 

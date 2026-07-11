@@ -6,13 +6,13 @@ from datetime import datetime, timezone
 
 import db
 
-DINGTALK_DIR = os.path.expanduser("~/.claude/skills/dingtalk-notify")
+DINGTALK_DIR = os.path.expanduser("~robinzheng/.claude/skills/dingtalk-notify")  # named-user form: correct even if invoked as root
 sys.path.insert(0, DINGTALK_DIR)
 from headless import CLAUDE_BIN, ALLOWED_TOOLS, DISALLOWED_TOOLS  # noqa: E402 (reuse the reviewed tool permission lists)
 
 ADMIN_WEB_DIR = os.path.dirname(os.path.abspath(__file__))
 _EXTRA_PATHS = [
-    os.path.expanduser("~/.local/bin"),
+    os.path.expanduser("~robinzheng/.local/bin"),
     "/opt/homebrew/bin", "/usr/local/bin",
     "/usr/bin", "/bin", "/usr/sbin", "/sbin",
 ]

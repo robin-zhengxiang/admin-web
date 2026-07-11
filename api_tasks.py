@@ -8,7 +8,7 @@ import crontab
 import users
 from routes import ApiError, route
 
-TASKCTL_DIR = os.path.expanduser("~/.claude/skills/task-manager")
+TASKCTL_DIR = os.path.expanduser("~robinzheng/.claude/skills/task-manager")  # named-user form: correct even when this process runs as root
 sys.path.insert(0, TASKCTL_DIR)
 import taskctl  # noqa: E402
 
@@ -152,7 +152,10 @@ def task_logs(match, query, body, session, resp):
     n = int(_query_single(query, "n", "50"))
     _find_task(owner_user, label)  # 404s if the task doesn't exist
     reg = _registered_tasks_for(owner_user).get(label)
-    log_path = os.path.expanduser(reg["log"]) if reg and reg.get("log") else None
+    # reg["log"] only ever comes from robinzheng's own tasks.json (see _registered_tasks_for),
+    # so a bare "~" in it always means robinzheng's home — expand against that explicitly,
+    # not the current process's home (which is root's once this runs as a root LaunchDaemon).
+    log_path = os.path.expanduser(reg["log"].replace("~/", "~robinzheng/", 1)) if reg and reg.get("log") else None
     if not log_path or not os.path.isfile(log_path):
         return {"lines": [], "note": "no readable log file registered for this task"}
     out = subprocess.run(["tail", "-n", str(n), log_path], capture_output=True, text=True).stdout
