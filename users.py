@@ -1,6 +1,8 @@
 import os
 import pwd
 
+from routes import route
+
 MIN_UID = 500  # macOS interactive accounts are normally >= 501; below that is system/service accounts
 EXCLUDED_USERNAMES = {"guest", "nobody", "daemon", "root"}
 
@@ -40,3 +42,8 @@ def get_user_by_uid(uid):
         if u["uid"] == uid:
             return u
     return None
+
+
+@route("GET", r"/api/users")
+def list_users_route(match, query, body, session, resp):
+    return {"users": [{"username": u["username"], "uid": u["uid"]} for u in list_local_users()]}

@@ -5,8 +5,10 @@ import traceback
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
+import api_tokens  # noqa: F401 (registers /api/overview, /api/sessions routes)
 import auth
 import db
+import users  # noqa: F401 (registers /api/users route)
 from routes import ROUTES, ApiError, ResponseHelper, route
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
