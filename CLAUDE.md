@@ -1,0 +1,82 @@
+# admin-web
+
+本机管理面板：Token 消耗看板、Skill 管理、定时任务管理、Bug 反馈。方案文档在 [docs/plan.md](docs/plan.md)（包含设计决策的完整讨论过程，改动较大的功能先读它）。
+
+## 运行
+
+```bash
+python3 server.py          # 监听 127.0.0.1:8000
+```
+
+当前以调用者的用户身份运行（非 root）。**计划中**会切换成 `/Library/LaunchDaemons` 下的 root 权限 LaunchDaemon（见 docs/plan.md「多用户与鉴权」一节），到那一步之前，跨用户读写会因权限不足而静默跳过或返回错误——这是预期行为，不是 bug。
+
+## 架构
+
+纯 Python3 stdlib，零第三方依赖（和 `~/.claude/skills/task-manager`、`~/.claude/skills/dingtalk-notify` 风格一致）。没有 web 框架，`server.py` 自己实现了一个几十行的路由 + 静态文件服务。
+
+```
+server.py       ThreadingHTTPServer 入口；CLEAN_URLS 做 /path -> /path.html 映射；启动时 import 各 api_*.py 模块以触发它们的 @route 注册
+routes.py       路由注册表（ROUTES 全局列表）+ ApiError + ResponseHelper（给 handler 一个设 cookie 的钩子）
+auth.py         dscl 密码校验（密码走 stdin，不进 argv）+ 内存态 session（重启进程即失效，没有持久化）
+users.py        list_local_users() 枚举 /Users/* 下的真实 macOS 账户（uid>=500，排除 Guest 等）；这是"多用户"整个设计的地基，其他模块都靠它知道"本机都有谁"
+db.py           SQLite schema + 后台线程增量扫描所有用户的 ~/.claude/projects/*.jsonl
+api_tokens.py   /api/overview /api/sessions /api/sessions/:id，pricing.json 驱动成本估算
+api_skills.py   /api/skills，跨用户读，写操作靠 session.username == owner_user 收窄
+api_tasks.py    /api/tasks，同上，外加 launchctl asuser 跨用户代持执行
+api_feedback.py /api/feedback，工单是全屋共享的（看板/skills/tasks 是"读共享写自己"，feedback 是"读写都共享"）
+feedback_scanner.py  独立脚本（不被 server.py 引用），定时跑，见下方专节
+static/         每个页面一个 html+js；dashboard.css 是全站共用样式表（不只是 dashboard 用）
+```
+
+## 路由约定（写新 API 时follow这个）
+
+```python
+@route("GET", r"/api/foo/(?P<id>\d+)", public=False)  # public=True 才不需要登录
+def handler(match, query, body, session, resp):
+    # match: re.Match，用 match.group("id") 取路径参数
+    # query: parse_qs 的结果，值是 list，例如 query.get("range") -> ["30d"] 或 None
+    # body: POST/PUT 的 JSON body，dict（GET 请求是 {}）
+    # session: 已登录用户的 {"username":..., "uid":..., "expires":...}，public 路由可能是 None
+    # resp: ResponseHelper，要设 cookie 才用得到，其余情况忽略
+    raise ApiError(404, "not found")  # 抛这个会被自动转成对应状态码的 JSON 错误
+    return {"some": "json"}           # 正常返回值会被 json.dumps 序列化
+```
+
+新写的模块要在 `server.py` 顶部 `import api_xxx  # noqa: F401` 一下（哪怕不直接用），否则它的 `@route` 装饰器不会执行，路由就注册不上——这是最容易踩的坑。
+
+## 多用户权限模型（贯穿所有模块的核心约束）
+
+这个应用管理的是**整台 Mac**，不是单个用户目录。本机目前有 `robinzheng`（管理者）和 `renyina` 两个真实账户。规则统一是：
+
+- **token 看板**：全屋汇总可见，谁登录都看全部数据，可按 `owner_user` 筛选。
+- **skills / tasks**：全屋列表可见（带 `owner_user` 字段），但**写操作**（toggle skill、改 schedule、enable/disable/run task）必须 `session["username"] == owner_user`，否则 403。前端也会把不属于自己的行对应按钮置灰，但**后端的校验才是唯一防线**——写新的写操作 API 时永远先检查这个，别只信前端。
+- **feedback**：读写都全屋共享，因为反馈的对象是这个 App 本身，不是个人隐私资源。
+
+对应到写文件时：写别的用户的文件（`settings.json` / `SKILL.md` / plist）之后要 `os.chown` 回那个用户的 uid/gid（`api_skills.py`/`api_tasks.py` 里有例子），否则文件会变成当前进程用户所有，等切到 root 运行后会导致目标用户自己没法再正常读写。当前非 root 运行时，跨用户写会直接 `PermissionError`，各处已经 `try/except` 兜底成合理的 4xx/静默跳过。
+
+## feedback_scanner.py 的安全设计（改这个文件前务必读）
+
+这个脚本会真的调 `claude -p --resume <session_id>` 驱动一个带工具（能读写文件）的 Claude Code session 去修 bug，然后**自动本地 git commit**（不 push、不重启服务，这是产品决策，不是技术限制）。
+
+**曾经的真实 bug**：最早的实现在处理完一个工单后，只看"仓库现在是不是 dirty"就决定要不要 commit——如果仓库里本来就有别的未提交改动（比如我正在写别的功能），会被误判成"这个工单改的"，commit message 却写着这是自动修复。用一个独立的临时仓库副本测出来的（正式仓库当时已经意外多了两个错误归因的 commit，靠 `git reset --soft` 撤销修复的）。
+
+现在的防护（**改动 `_commit_if_changed` / `main()` 时不要绕开这两条**）：
+1. `main()` 一开始检查 `_repo_is_clean()`——**如果仓库本来就是脏的，整轮直接跳过**，不处理任何工单。避免把人类正在做的事误算成 AI 的修复。
+2. 每个工单处理前记录 `before_head = _current_head()`，处理后同时检查「有没有新的未提交改动」和「HEAD 有没有走（AI 自己 commit 了）」，两者任一为真才算「这个工单改了东西」，diff 范围是 `before_head..after_head`——不是"repo 现在 dirty 不 dirty"这种全局状态。
+
+复现验证方式：`cp -r ~/admin-web /tmp/xxx` 到一个独立目录，在那个副本里跑，不要在真实仓库上做这种实验（see `tests/test_feedback_scanner.py` 已经把这个场景写成自动化测试了）。
+
+工具权限复用自 `~/.claude/skills/dingtalk-notify/headless.py`（`ALLOWED_TOOLS`/`DISALLOWED_TOOLS`，挡住 `git push`/`sudo`/`launchctl`/`rm`/`chmod`/`chown` 等）和 `headless_session.py` 的订阅 OAuth 环境变量模式（不注入 `ANTHROPIC_API_KEY`，走 Claude Code 自己的订阅登录）。
+
+## 测试
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+纯 stdlib `unittest`，没有引入 pytest（保持零依赖）。测试原则：
+- 涉及文件系统的模块（`users.py`/`api_skills.py`/`api_tasks.py`）一律用 `tempfile` 造假的 home 目录 + `unittest.mock.patch` 替换 `list_local_users`，**不碰真实的 `~/.claude` 或 `~/Library/LaunchAgents`**。
+- 涉及 `launchctl`/`git`/`claude` 这类外部命令的，要么 mock 掉 `subprocess.run`，要么（像 `feedback_scanner` 的 git 归因逻辑）在一个临时 git 仓库里跑真实命令——但绝不在这个真实项目仓库上跑。
+- `db.py`/`api_tokens.py`/`api_feedback.py` 的测试用 `mock.patch.object(db, "DB_PATH", tmp_path)` 指向临时 SQLite 文件。
+
+加新功能时照着抄这个隔离方式，别在测试里真的碰生产数据/真实 launchd/真实 git 历史。
