@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>admin-web · 登录</title>
+<style>
+  body { font-family: -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f4f4f5; }
+  form { background: #fff; padding: 32px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); width: 280px; }
+  h1 { font-size: 18px; margin: 0 0 16px; }
+  label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; }
+  input { width: 100%; box-sizing: border-box; padding: 8px 10px; margin-bottom: 14px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+  button { width: 100%; padding: 9px; border: none; border-radius: 6px; background: #111; color: #fff; font-size: 14px; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #error { color: #c0392b; font-size: 13px; margin-bottom: 10px; display: none; }
+</style>
+</head>
+<body>
+<form id="login-form">
+  <h1>本机管理面板</h1>
+  <div id="error"></div>
+  <label for="username">macOS 用户名</label>
+  <input id="username" name="username" autocomplete="username" required>
+  <label for="password">密码</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" required>
+  <button type="submit" id="submit-btn">登录</button>
+</form>
+<script src="/login.js"></script>
+</body>
+</html>

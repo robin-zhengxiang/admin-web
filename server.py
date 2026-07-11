@@ -5,16 +5,18 @@ import traceback
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
+import auth
 import db
-from routes import ROUTES, ApiError, route
+from routes import ROUTES, ApiError, ResponseHelper, route
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 HOST = "127.0.0.1"
-PORT = 8787
+PORT = 8000
 
 CLEAN_URLS = {
     "/": "/index.html",
+    "/login": "/login.html",
     "/skills": "/skills.html",
     "/tasks": "/tasks.html",
 }
@@ -46,23 +48,36 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(405, {"error": "method not allowed"})
 
     def _dispatch_api(self, method, path, query):
-        for m, pattern, fn in ROUTES:
+        for m, pattern, fn, public in ROUTES:
             if m != method:
                 continue
             match = pattern.match(path)
             if not match:
                 continue
+            session = self._get_session()
+            if not public and session is None:
+                self._send_json(401, {"error": "unauthorized"})
+                return
+            resp = ResponseHelper()
             try:
                 body = self._read_json_body()
-                result = fn(match, query, body)
-                self._send_json(200, result)
+                result = fn(match, query, body, session, resp)
+                self._send_json(200, result, extra_headers=resp.extra_headers)
             except ApiError as e:
-                self._send_json(e.status, {"error": e.message})
+                self._send_json(e.status, {"error": e.message}, extra_headers=resp.extra_headers)
             except Exception as e:
                 traceback.print_exc()
                 self._send_json(500, {"error": str(e)})
             return
         self._send_json(404, {"error": f"no route for {method} {path}"})
+
+    def _get_session(self):
+        cookie_header = self.headers.get("Cookie", "")
+        for part in cookie_header.split(";"):
+            part = part.strip()
+            if part.startswith(auth.SESSION_COOKIE_NAME + "="):
+                return auth.get_session(part.split("=", 1)[1])
+        return None
 
     def _read_json_body(self):
         length = int(self.headers.get("Content-Length", 0) or 0)
@@ -73,11 +88,13 @@ class Handler(BaseHTTPRequestHandler):
             return {}
         return json.loads(raw)
 
-    def _send_json(self, status, obj):
+    def _send_json(self, status, obj, extra_headers=None):
         payload = json.dumps(obj).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(payload)))
+        for name, value in extra_headers or []:
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(payload)
 
@@ -101,8 +118,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
-@route("GET", r"/api/health")
-def health(match, query, body):
+@route("GET", r"/api/health", public=True)
+def health(match, query, body, session, resp):
     return {"status": "ok"}
 
 

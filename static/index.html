@@ -7,6 +7,19 @@
 <body>
 <h1>admin-web</h1>
 <p>骨架搭好了，看板页面还没做。</p>
-<p><a href="/skills">skills</a> · <a href="/tasks">tasks</a></p>
+<p id="whoami"></p>
+<p><a href="/skills">skills</a> · <a href="/tasks">tasks</a> · <a href="#" id="logout">登出</a></p>
+<script>
+fetch("/api/me").then(async (res) => {
+  if (!res.ok) { window.location.href = "/login"; return; }
+  const data = await res.json();
+  document.getElementById("whoami").textContent = "当前登录: " + data.username;
+});
+document.getElementById("logout").addEventListener("click", async (e) => {
+  e.preventDefault();
+  await fetch("/api/logout", { method: "POST" });
+  window.location.href = "/login";
+});
+</script>
 </body>
 </html>

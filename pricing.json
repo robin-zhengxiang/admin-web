@@ -1,0 +1,15 @@
+{
+  "_unit": "USD per 1,000,000 tokens",
+  "_source": "Anthropic public pricing (claude-api skill cache, 2026-06-24). Cache write/read = input price x 1.25 (5m) / x2 (1h) / x0.1 (read).",
+  "_default": {"input": 3.00, "output": 15.00, "cache_write_5m": 3.75, "cache_write_1h": 6.00, "cache_read": 0.30},
+  "models": {
+    "claude-sonnet-5": {
+      "input": 2.00, "output": 10.00,
+      "cache_write_5m": 2.50, "cache_write_1h": 4.00, "cache_read": 0.20,
+      "note": "intro pricing through 2026-08-31; reverts to input 3.00 / output 15.00 after"
+    },
+    "claude-opus-4-8": {"input": 5.00, "output": 25.00, "cache_write_5m": 6.25, "cache_write_1h": 10.00, "cache_read": 0.50},
+    "claude-haiku-4-5": {"input": 1.00, "output": 5.00, "cache_write_5m": 1.25, "cache_write_1h": 2.00, "cache_read": 0.10},
+    "claude-sonnet-4-6": {"input": 3.00, "output": 15.00, "cache_write_5m": 3.75, "cache_write_1h": 6.00, "cache_read": 0.30}
+  }
+}
