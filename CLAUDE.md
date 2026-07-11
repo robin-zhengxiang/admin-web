@@ -29,6 +29,12 @@ feedback_scanner.py  独立脚本（不被 server.py 引用），定时跑，见
 static/         每个页面一个 html+js；dashboard.css 是全站共用样式表（不只是 dashboard 用）
 ```
 
+## 前端约定（改 UI 时follow这个）
+
+- **样式**：`static/vendor/pico.min.css`（MIT，vendored，和 Chart.js 一样不走 CDN）打底，靠语义化标签拿默认样式——卡片用 `<article>`，导航用 `<nav><ul>...</ul><ul>...</ul></nav>`（多个 `<ul>` 是 Pico 的标准写法，用来在 nav 里分组左右对齐），表单控件（`input`/`select`/`button`/`textarea`）不用另外套类基本就是好看的。`dashboard.css` 只保留 Pico 没有的东西：`.topbar`、`.stat-tile`、`.badge`、`#detail-overlay`/`#detail-panel` 抽屉、`.pagination`。新加页面元素前先看 Pico 有没有现成的，别重新造。
+- **列表只读，编辑一律进抽屉**：`skills.html`/`tasks.html` 的表格行本身不放任何可编辑控件（不放 `<select>`、不放输入框），点一行才在 `#detail-panel` 里展开完整的操作面板（状态切换、内容编辑、计划时间、启停/触发按钮、日志）。这是产品上明确要的模式，新加列表页也照这个来，别在 `<tr>` 里塞 `<input>`/`<select>`。
+- **大列表要分页**：session 详情里的时间线（`main_thread`/`sidechain`）用 `dashboard.js` 的 `renderPaginatedTurns()` 分页渲染（20/页），因为单个 session 常有几百轮。以后别的地方渲染可能很长的列表，抄这个模式，别一次性塞进 DOM。
+
 ## 已知踩过的坑
 
 **`#detail-overlay` / `#detail-panel` 的 z-index**（session 详情、skill 编辑器、task 日志、feedback 对话线程共用同一套弹层组件）：`#detail-overlay` 设了 `z-index: 10`，但 `#detail-panel` 原来没设 z-index（默认 `auto`）——按 CSS 层叠规则，`auto`/`0` 层叠上下文早于正数 z-index 绘制，所以哪怕 `#detail-panel` 在 DOM 里排在后面，视觉上"看起来在前面"，实际点击/拖选事件全被 `#detail-overlay` 挡在上层截胡了。表现就是：面板里的 textarea 点不进去、选不了文字、复制不了——四个功能模块（看板/skills/tasks/feedback）用的是同一个弹层组件，所以这个 bug 一次性影响了全部详情页。修复：给 `#detail-panel` 显式设 `z-index: 11`（比 overlay 高）+ `user-select: text`。**以后凡是新加一个用到 `#detail-overlay`+`#detail-panel` 的弹层，都要确认面板的 z-index 高于 overlay**，这类"看起来对但点不动"的问题很容易被当成 JS bug 去排查，其实是纯 CSS 层叠问题。
