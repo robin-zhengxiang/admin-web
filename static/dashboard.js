@@ -230,7 +230,7 @@ async function showDetail(sessionId) {
     return div;
   };
 
-  for (const t of detail.main_thread) panel.appendChild(renderTurn(t));
+  renderPaginatedTurns(panel, detail.main_thread, renderTurn);
 
   if (detail.sidechain.length) {
     const section = document.createElement("div");
@@ -238,12 +238,50 @@ async function showDetail(sessionId) {
     const h3 = document.createElement("h2");
     h3.textContent = `子任务 (${detail.sidechain.length} 轮)`;
     section.appendChild(h3);
-    for (const t of detail.sidechain) section.appendChild(renderTurn(t));
+    renderPaginatedTurns(section, detail.sidechain, renderTurn);
     panel.appendChild(section);
   }
 
   panel.style.display = "block";
   overlay.style.display = "block";
+}
+
+const TURNS_PAGE_SIZE = 20;
+
+function renderPaginatedTurns(container, turns, renderTurn) {
+  let page = 0;
+  const totalPages = Math.max(1, Math.ceil(turns.length / TURNS_PAGE_SIZE));
+  const listEl = document.createElement("div");
+  const pager = document.createElement("div");
+  pager.className = "pagination";
+
+  function renderPage() {
+    listEl.textContent = "";
+    const start = page * TURNS_PAGE_SIZE;
+    for (const t of turns.slice(start, start + TURNS_PAGE_SIZE)) listEl.appendChild(renderTurn(t));
+
+    pager.textContent = "";
+    if (totalPages > 1) {
+      const prevBtn = document.createElement("button");
+      prevBtn.textContent = "上一页";
+      prevBtn.disabled = page === 0;
+      prevBtn.addEventListener("click", () => { page--; renderPage(); });
+
+      const info = document.createElement("span");
+      info.textContent = `第 ${page + 1} / ${totalPages} 页（共 ${turns.length} 条）`;
+
+      const nextBtn = document.createElement("button");
+      nextBtn.textContent = "下一页";
+      nextBtn.disabled = page >= totalPages - 1;
+      nextBtn.addEventListener("click", () => { page++; renderPage(); });
+
+      pager.append(prevBtn, info, nextBtn);
+    }
+  }
+
+  renderPage();
+  container.appendChild(listEl);
+  container.appendChild(pager);
 }
 
 function hideDetail() {

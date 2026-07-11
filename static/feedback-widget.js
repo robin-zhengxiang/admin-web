@@ -3,9 +3,8 @@
   btn.textContent = "反馈";
   btn.style.cssText = `
     position: fixed; right: 20px; bottom: 20px; z-index: 100;
-    padding: 10px 16px; border: none; border-radius: 20px;
-    background: var(--text-primary, #111); color: var(--surface-1, #fff);
-    font-size: 13px; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    width: auto; padding: 0.6rem 1.1rem; border-radius: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.25);
   `;
 
   const overlay = document.createElement("div");
@@ -13,19 +12,19 @@
 
   const form = document.createElement("form");
   form.style.cssText = `
-    position:fixed;right:20px;bottom:70px;z-index:201;width:280px;
-    background:var(--surface-1,#fff);border-radius:10px;padding:16px;
-    box-shadow:0 4px 20px rgba(0,0,0,0.25);
+    display:none;position:fixed;right:20px;bottom:76px;z-index:201;width:300px;
+    background:var(--pico-background-color);border-radius:var(--pico-border-radius);
+    padding:1rem;box-shadow:0 4px 20px rgba(0,0,0,0.3);
   `;
   form.innerHTML = `
-    <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--text-primary,#111);">反馈一个 bug</div>
-    <input name="title" placeholder="标题" required style="width:100%;box-sizing:border-box;padding:6px 8px;margin-bottom:8px;border:1px solid var(--baseline,#ccc);border-radius:6px;">
-    <textarea name="description" placeholder="描述一下遇到的问题" required style="width:100%;box-sizing:border-box;height:70px;padding:6px 8px;margin-bottom:8px;border:1px solid var(--baseline,#ccc);border-radius:6px;"></textarea>
-    <div style="display:flex;gap:8px;">
-      <button type="submit" style="flex:1;padding:7px;border:none;border-radius:6px;background:var(--text-primary,#111);color:var(--surface-1,#fff);cursor:pointer;">提交</button>
-      <button type="button" data-cancel style="padding:7px 10px;border:none;border-radius:6px;background:transparent;color:var(--text-secondary,#555);cursor:pointer;">取消</button>
+    <strong style="display:block;margin-bottom:0.6rem;">反馈一个 bug</strong>
+    <input name="title" placeholder="标题" required>
+    <textarea name="description" placeholder="描述一下遇到的问题" required rows="4"></textarea>
+    <div style="display:flex;gap:0.5rem;">
+      <button type="submit" style="width:auto;flex:1;margin:0;">提交</button>
+      <button type="button" data-cancel class="secondary" style="width:auto;margin:0;">取消</button>
     </div>
-    <div id="fb-status" style="font-size:12px;color:var(--muted,#888);margin-top:6px;"></div>
+    <small id="fb-status"></small>
   `;
 
   function open() {
@@ -67,5 +66,4 @@
   document.body.appendChild(overlay);
   document.body.appendChild(form);
   document.body.appendChild(btn);
-  form.style.display = "none";
 })();

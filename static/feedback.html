@@ -3,24 +3,28 @@
 <head>
 <meta charset="utf-8">
 <title>admin-web · feedback</title>
+<link rel="stylesheet" href="/vendor/pico.min.css">
 <link rel="stylesheet" href="/dashboard.css">
 </head>
 <body>
-<div class="topbar">
+<header class="topbar">
   <nav>
-    <a href="/">看板</a>
-    <a href="/skills">skills</a>
-    <a href="/tasks">tasks</a>
-    <a href="/feedback" class="active">feedback</a>
+    <ul><li><strong>admin-web</strong></li></ul>
+    <ul>
+      <li><a href="/">看板</a></li>
+      <li><a href="/skills">skills</a></li>
+      <li><a href="/tasks">tasks</a></li>
+      <li><a href="/feedback" class="active">feedback</a></li>
+    </ul>
+    <ul>
+      <li><small id="whoami"></small></li>
+      <li><a href="#" id="logout">登出</a></li>
+    </ul>
   </nav>
-  <div>
-    <span id="whoami"></span>
-    <a id="logout" href="#">登出</a>
-  </div>
-</div>
+</header>
 
-<main>
-  <div class="card">
+<main class="container">
+  <article>
     <h2>反馈工单（全屋共享）</h2>
     <table>
       <thead>
@@ -33,11 +37,11 @@
       </thead>
       <tbody id="ticket-rows"></tbody>
     </table>
-  </div>
+  </article>
 </main>
 
 <div id="detail-overlay"></div>
-<div id="detail-panel" style="display:none"></div>
+<div id="detail-panel"></div>
 
 <script src="/feedback.js"></script>
 <script src="/feedback-widget.js"></script>

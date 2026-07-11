@@ -1,4 +1,5 @@
 let currentUser = null;
+let tasksCache = [];
 
 async function api(path, opts) {
   const res = await fetch(path, opts);
@@ -22,18 +23,21 @@ function statusLabel(status, pid) {
   return "○ 已禁用";
 }
 
-function pad2(n) {
-  return String(n).padStart(2, "0");
+function statusBadgeClass(status) {
+  if (status === "running") return "badge status-running";
+  if (status === "enabled") return "badge status-enabled";
+  return "badge status-disabled";
 }
 
 async function loadTasks() {
   const data = await api("/api/tasks");
+  tasksCache = data.tasks;
   const tbody = document.getElementById("task-rows");
   tbody.textContent = "";
 
-  for (const t of data.tasks) {
-    const mine = t.owner_user === currentUser;
+  for (const t of tasksCache) {
     const tr = document.createElement("tr");
+    tr.addEventListener("click", () => openTaskDrawer(t));
 
     const tdName = document.createElement("td");
     tdName.textContent = t.name;
@@ -41,14 +45,17 @@ async function loadTasks() {
     tr.appendChild(tdName);
 
     const tdUser = document.createElement("td");
-    const badge = document.createElement("span");
-    badge.className = "badge";
-    badge.textContent = t.owner_user;
-    tdUser.appendChild(badge);
+    const userBadge = document.createElement("span");
+    userBadge.className = "badge";
+    userBadge.textContent = t.owner_user;
+    tdUser.appendChild(userBadge);
     tr.appendChild(tdUser);
 
     const tdStatus = document.createElement("td");
-    tdStatus.textContent = statusLabel(t.status, t.pid);
+    const statusBadge = document.createElement("span");
+    statusBadge.className = statusBadgeClass(t.status);
+    statusBadge.textContent = statusLabel(t.status, t.pid);
+    tdStatus.appendChild(statusBadge);
     tr.appendChild(tdStatus);
 
     const tdType = document.createElement("td");
@@ -56,92 +63,16 @@ async function loadTasks() {
     tr.appendChild(tdType);
 
     const tdSchedule = document.createElement("td");
-    if (t.schedule) {
-      if (mine) {
-        const cronInput = document.createElement("input");
-        cronInput.type = "text";
-        cronInput.value = t.cron || "";
-        cronInput.placeholder = "分 时 日 月 周，如 0 2 * * *";
-        cronInput.style.width = "150px";
-        cronInput.style.fontFamily = "ui-monospace,monospace";
-        const errEl = document.createElement("div");
-        errEl.style.cssText = "color:#c0392b;font-size:11px;max-width:220px;";
-        const saveBtn = document.createElement("button");
-        saveBtn.textContent = "保存";
-        saveBtn.addEventListener("click", async () => {
-          saveBtn.disabled = true;
-          errEl.textContent = "";
-          try {
-            await api(`/api/tasks/${t.owner_user}/${encodeURIComponent(t.label)}/schedule`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ cron: cronInput.value.trim() }),
-            });
-            saveBtn.textContent = "已保存";
-          } catch (err) {
-            errEl.textContent = err.message;
-          } finally {
-            saveBtn.disabled = false;
-          }
-        });
-        tdSchedule.append(cronInput, saveBtn, errEl);
-      } else {
-        tdSchedule.textContent = t.cron || `${pad2(t.schedule.Hour ?? 0)}:${pad2(t.schedule.Minute ?? 0)}`;
-      }
-    } else {
-      tdSchedule.textContent = "—";
-    }
+    tdSchedule.className = "mono";
+    tdSchedule.textContent = t.cron || (t.schedule ? "自定义（见详情）" : "—");
     tr.appendChild(tdSchedule);
 
-    const tdActions = document.createElement("td");
-    const toggleBtn = document.createElement("button");
-    const isEnabled = t.status !== "disabled";
-    toggleBtn.textContent = isEnabled ? "禁用" : "启用";
-    toggleBtn.disabled = !mine;
-    if (!mine) toggleBtn.title = `需要以 ${t.owner_user} 身份登录才能操作`;
-    toggleBtn.addEventListener("click", async () => {
-      toggleBtn.disabled = true;
-      try {
-        await api(`/api/tasks/${t.owner_user}/${encodeURIComponent(t.label)}/${isEnabled ? "disable" : "enable"}`, { method: "POST" });
-        await loadTasks();
-      } catch (err) {
-        alert(err.message);
-        toggleBtn.disabled = false;
-      }
-    });
-    tdActions.appendChild(toggleBtn);
-
-    if (t.type === "scheduled") {
-      const runBtn = document.createElement("button");
-      runBtn.textContent = "立即触发";
-      runBtn.disabled = !mine || !isEnabled;
-      runBtn.style.marginLeft = "6px";
-      runBtn.addEventListener("click", async () => {
-        runBtn.disabled = true;
-        try {
-          await api(`/api/tasks/${t.owner_user}/${encodeURIComponent(t.label)}/run`, { method: "POST" });
-          runBtn.textContent = "已触发";
-        } catch (err) {
-          alert(err.message);
-        } finally {
-          runBtn.disabled = false;
-        }
-      });
-      tdActions.appendChild(runBtn);
-    }
-
-    const logBtn = document.createElement("button");
-    logBtn.textContent = "看日志";
-    logBtn.style.marginLeft = "6px";
-    logBtn.addEventListener("click", () => showLogs(t));
-    tdActions.appendChild(logBtn);
-
-    tr.appendChild(tdActions);
     tbody.appendChild(tr);
   }
 }
 
-async function showLogs(t) {
+async function openTaskDrawer(t) {
+  const mine = t.owner_user === currentUser;
   const panel = document.getElementById("detail-panel");
   const overlay = document.getElementById("detail-overlay");
   panel.textContent = "";
@@ -149,39 +80,155 @@ async function showLogs(t) {
   const close = document.createElement("span");
   close.className = "close-btn";
   close.textContent = "✕";
-  close.addEventListener("click", () => {
-    panel.style.display = "none";
-    overlay.style.display = "none";
-  });
+  close.addEventListener("click", closeDrawer);
   panel.appendChild(close);
 
   const h2 = document.createElement("h2");
-  h2.textContent = `${t.owner_user} / ${t.name} · 日志`;
+  h2.textContent = `${t.owner_user} / ${t.name}`;
   panel.appendChild(h2);
 
+  if (t.desc) {
+    const desc = document.createElement("p");
+    desc.textContent = t.desc;
+    panel.appendChild(desc);
+  }
+
+  const statusLine = document.createElement("p");
+  const statusBadge = document.createElement("span");
+  statusBadge.className = statusBadgeClass(t.status);
+  statusBadge.textContent = statusLabel(t.status, t.pid);
+  statusLine.append(statusBadge, ` · 类型: ${t.type}`);
+  panel.appendChild(statusLine);
+
+  if (!mine) {
+    const note = document.createElement("p");
+    note.className = "readonly-note";
+    note.textContent = `需要以 ${t.owner_user} 身份登录才能操作或改计划`;
+    panel.appendChild(note);
+  }
+
+  const actionRow = document.createElement("div");
+  actionRow.className = "action-row";
+  const actionErr = document.createElement("span");
+  actionErr.className = "error-text";
+
+  const isEnabled = t.status !== "disabled";
+  const toggleBtn = document.createElement("button");
+  toggleBtn.textContent = isEnabled ? "禁用" : "启用";
+  toggleBtn.disabled = !mine;
+  toggleBtn.addEventListener("click", async () => {
+    toggleBtn.disabled = true;
+    actionErr.textContent = "";
+    try {
+      await api(`/api/tasks/${t.owner_user}/${encodeURIComponent(t.label)}/${isEnabled ? "disable" : "enable"}`, { method: "POST" });
+      await loadTasks();
+      closeDrawer();
+    } catch (err) {
+      actionErr.textContent = err.message;
+      toggleBtn.disabled = false;
+    }
+  });
+  actionRow.appendChild(toggleBtn);
+
+  if (t.type === "scheduled") {
+    const runBtn = document.createElement("button");
+    runBtn.textContent = "立即触发";
+    runBtn.disabled = !mine || !isEnabled;
+    runBtn.addEventListener("click", async () => {
+      runBtn.disabled = true;
+      actionErr.textContent = "";
+      try {
+        await api(`/api/tasks/${t.owner_user}/${encodeURIComponent(t.label)}/run`, { method: "POST" });
+        runBtn.textContent = "已触发";
+      } catch (err) {
+        actionErr.textContent = err.message;
+      } finally {
+        runBtn.disabled = false;
+      }
+    });
+    actionRow.appendChild(runBtn);
+  }
+  panel.appendChild(actionRow);
+  panel.appendChild(actionErr);
+
+  if (t.schedule) {
+    const scheduleLabel = document.createElement("label");
+    scheduleLabel.textContent = "计划时间（crontab：分 时 日 月 周）";
+    panel.appendChild(scheduleLabel);
+
+    const fieldRow = document.createElement("div");
+    fieldRow.className = "field-row";
+    const cronInput = document.createElement("input");
+    cronInput.type = "text";
+    cronInput.className = "mono";
+    cronInput.value = t.cron || "";
+    cronInput.placeholder = "0 2 * * *";
+    cronInput.disabled = !mine;
+    const saveBtn = document.createElement("button");
+    saveBtn.textContent = "保存计划";
+    saveBtn.disabled = !mine;
+    const cronErr = document.createElement("span");
+    cronErr.className = "error-text";
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true;
+      cronErr.textContent = "";
+      try {
+        await api(`/api/tasks/${t.owner_user}/${encodeURIComponent(t.label)}/schedule`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cron: cronInput.value.trim() }),
+        });
+        saveBtn.textContent = "已保存";
+        await loadTasks();
+      } catch (err) {
+        cronErr.textContent = err.message;
+        saveBtn.textContent = "保存计划";
+      } finally {
+        saveBtn.disabled = !mine;
+      }
+    });
+    fieldRow.append(cronInput, saveBtn);
+    panel.appendChild(fieldRow);
+    panel.appendChild(cronErr);
+    if (!t.cron) {
+      const compoundNote = document.createElement("p");
+      compoundNote.className = "readonly-note";
+      compoundNote.textContent = "当前是复合计划（多条触发规则），保存会用上面的表达式整体替换。";
+      panel.appendChild(compoundNote);
+    }
+  }
+
+  const logsHeading = document.createElement("h2");
+  logsHeading.textContent = "日志";
+  logsHeading.style.marginTop = "1.5rem";
+  panel.appendChild(logsHeading);
+
   const pre = document.createElement("pre");
-  pre.style.cssText = "white-space:pre-wrap;font-size:12px;font-family:ui-monospace,monospace;";
+  pre.className = "mono";
+  pre.style.whiteSpace = "pre-wrap";
   panel.appendChild(pre);
 
   const refreshBtn = document.createElement("button");
-  refreshBtn.textContent = "刷新";
-  refreshBtn.addEventListener("click", load);
+  refreshBtn.textContent = "刷新日志";
   panel.appendChild(refreshBtn);
 
-  async function load() {
+  async function loadLogs() {
     const data = await api(`/api/tasks/${t.owner_user}/${encodeURIComponent(t.label)}/logs?n=100`);
     pre.textContent = data.lines && data.lines.length ? data.lines.join("\n") : (data.note || "(空)");
   }
-  await load();
+  refreshBtn.addEventListener("click", loadLogs);
+  await loadLogs();
 
   panel.style.display = "block";
   overlay.style.display = "block";
 }
 
-document.getElementById("detail-overlay").addEventListener("click", () => {
+function closeDrawer() {
   document.getElementById("detail-panel").style.display = "none";
   document.getElementById("detail-overlay").style.display = "none";
-});
+}
+
+document.getElementById("detail-overlay").addEventListener("click", closeDrawer);
 document.getElementById("logout").addEventListener("click", async (e) => {
   e.preventDefault();
   await fetch("/api/logout", { method: "POST" });
