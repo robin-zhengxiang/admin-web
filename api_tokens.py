@@ -7,7 +7,7 @@ from routes import ApiError, route
 
 PRICING_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pricing.json")
 
-RANGE_DAYS = {"7d": 7, "30d": 30}
+RANGE_DAYS = {"7d": 7, "30d": 30, "1y": 365}
 
 
 def _load_pricing():

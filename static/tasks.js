@@ -58,36 +58,35 @@ async function loadTasks() {
     const tdSchedule = document.createElement("td");
     if (t.schedule) {
       if (mine) {
-        const hourInput = document.createElement("input");
-        hourInput.type = "number";
-        hourInput.min = 0; hourInput.max = 23;
-        hourInput.value = t.schedule.Hour ?? 0;
-        hourInput.style.width = "44px";
-        const minuteInput = document.createElement("input");
-        minuteInput.type = "number";
-        minuteInput.min = 0; minuteInput.max = 59;
-        minuteInput.value = t.schedule.Minute ?? 0;
-        minuteInput.style.width = "44px";
+        const cronInput = document.createElement("input");
+        cronInput.type = "text";
+        cronInput.value = t.cron || "";
+        cronInput.placeholder = "分 时 日 月 周，如 0 2 * * *";
+        cronInput.style.width = "150px";
+        cronInput.style.fontFamily = "ui-monospace,monospace";
+        const errEl = document.createElement("div");
+        errEl.style.cssText = "color:#c0392b;font-size:11px;max-width:220px;";
         const saveBtn = document.createElement("button");
         saveBtn.textContent = "保存";
         saveBtn.addEventListener("click", async () => {
           saveBtn.disabled = true;
+          errEl.textContent = "";
           try {
             await api(`/api/tasks/${t.owner_user}/${encodeURIComponent(t.label)}/schedule`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ hour: Number(hourInput.value), minute: Number(minuteInput.value) }),
+              body: JSON.stringify({ cron: cronInput.value.trim() }),
             });
             saveBtn.textContent = "已保存";
           } catch (err) {
-            alert(err.message);
+            errEl.textContent = err.message;
           } finally {
             saveBtn.disabled = false;
           }
         });
-        tdSchedule.append(hourInput, ":", minuteInput, saveBtn);
+        tdSchedule.append(cronInput, saveBtn, errEl);
       } else {
-        tdSchedule.textContent = `${pad2(t.schedule.Hour ?? 0)}:${pad2(t.schedule.Minute ?? 0)}`;
+        tdSchedule.textContent = t.cron || `${pad2(t.schedule.Hour ?? 0)}:${pad2(t.schedule.Minute ?? 0)}`;
       }
     } else {
       tdSchedule.textContent = "—";

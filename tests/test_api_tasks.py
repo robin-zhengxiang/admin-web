@@ -102,7 +102,7 @@ class ApiTasksTests(unittest.TestCase):
         _write_plist(self.alice["home"], "com.alice.scheduled-thing", schedule={"Hour": 2, "Minute": 0})
         match = FakeMatch({"owner_user": "alice", "label": "com.alice.scheduled-thing"})
         with mock.patch("api_tasks.subprocess.run", return_value=_fake_completed()) as run:
-            result = api_tasks.set_schedule(match, {}, {"hour": 9, "minute": 30}, fake_session("alice"), None)
+            result = api_tasks.set_schedule(match, {}, {"cron": "30 9 * * *"}, fake_session("alice"), None)
         self.assertEqual(result["schedule"], {"Hour": 9, "Minute": 30})
 
         plist_path = os.path.join(self.alice["home"], "Library", "LaunchAgents", "com.alice.scheduled-thing.plist")
@@ -111,18 +111,32 @@ class ApiTasksTests(unittest.TestCase):
         # unload + load, both without asuser since it's the current (alice) user
         self.assertEqual(run.call_count, 2)
 
+    def test_set_schedule_expands_compound_cron_to_a_list(self):
+        _write_plist(self.alice["home"], "com.alice.scheduled-thing", schedule={"Hour": 2, "Minute": 0})
+        match = FakeMatch({"owner_user": "alice", "label": "com.alice.scheduled-thing"})
+        with mock.patch("api_tasks.subprocess.run", return_value=_fake_completed()):
+            result = api_tasks.set_schedule(match, {}, {"cron": "0 9,18 * * *"}, fake_session("alice"), None)
+        self.assertEqual(result["schedule"], [{"Hour": 9, "Minute": 0}, {"Hour": 18, "Minute": 0}])
+
     def test_set_schedule_rejects_non_scheduled_task(self):
         _write_plist(self.alice["home"], "com.alice.daemon-thing")  # no StartCalendarInterval
         match = FakeMatch({"owner_user": "alice", "label": "com.alice.daemon-thing"})
         with self.assertRaises(ApiError) as ctx:
-            api_tasks.set_schedule(match, {}, {"hour": 9, "minute": 30}, fake_session("alice"), None)
+            api_tasks.set_schedule(match, {}, {"cron": "30 9 * * *"}, fake_session("alice"), None)
         self.assertEqual(ctx.exception.status, 400)
 
-    def test_set_schedule_requires_hour_and_minute(self):
+    def test_set_schedule_requires_cron(self):
         _write_plist(self.alice["home"], "com.alice.scheduled-thing", schedule={"Hour": 2, "Minute": 0})
         match = FakeMatch({"owner_user": "alice", "label": "com.alice.scheduled-thing"})
         with self.assertRaises(ApiError) as ctx:
-            api_tasks.set_schedule(match, {}, {"hour": 9}, fake_session("alice"), None)
+            api_tasks.set_schedule(match, {}, {}, fake_session("alice"), None)
+        self.assertEqual(ctx.exception.status, 400)
+
+    def test_set_schedule_rejects_invalid_cron(self):
+        _write_plist(self.alice["home"], "com.alice.scheduled-thing", schedule={"Hour": 2, "Minute": 0})
+        match = FakeMatch({"owner_user": "alice", "label": "com.alice.scheduled-thing"})
+        with self.assertRaises(ApiError) as ctx:
+            api_tasks.set_schedule(match, {}, {"cron": "99 2 * * *"}, fake_session("alice"), None)
         self.assertEqual(ctx.exception.status, 400)
 
     def test_logs_without_registered_entry_returns_note(self):

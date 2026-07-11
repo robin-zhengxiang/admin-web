@@ -12,6 +12,19 @@ import db
 import users
 
 
+class RangeCutoffTests(unittest.TestCase):
+    def test_known_ranges_and_all(self):
+        self.assertIsNone(api_tokens._range_cutoff("all"))
+        self.assertIsNotNone(api_tokens._range_cutoff("7d"))
+        self.assertIsNotNone(api_tokens._range_cutoff("30d"))
+        self.assertIsNotNone(api_tokens._range_cutoff("1y"))
+
+    def test_1y_cutoff_is_far_earlier_than_30d(self):
+        cutoff_30d = api_tokens._range_cutoff("30d")
+        cutoff_1y = api_tokens._range_cutoff("1y")
+        self.assertLess(cutoff_1y, cutoff_30d)
+
+
 class PricingTests(unittest.TestCase):
     def setUp(self):
         self.pricing = {

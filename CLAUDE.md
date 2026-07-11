@@ -22,11 +22,16 @@ users.py        list_local_users() 枚举 /Users/* 下的真实 macOS 账户（u
 db.py           SQLite schema + 后台线程增量扫描所有用户的 ~/.claude/projects/*.jsonl
 api_tokens.py   /api/overview /api/sessions /api/sessions/:id，pricing.json 驱动成本估算
 api_skills.py   /api/skills，跨用户读，写操作靠 session.username == owner_user 收窄
-api_tasks.py    /api/tasks，同上，外加 launchctl asuser 跨用户代持执行
+api_tasks.py    /api/tasks，同上，外加 launchctl asuser 跨用户代持执行；计划时间用 crontab.py 校验/转换
+crontab.py      标准 5 段 crontab 表达式（分 时 日 月 周）解析 + 校验 + 展开成 launchd 的 StartCalendarInterval（可能是单个 dict 或多个 dict 的列表，取决于表达式里有没有逗号/范围）；也有反向转换（StartCalendarInterval -> cron 字符串）给前端展示当前计划用。全部字段都是 `*` 会被拒绝（等于每分钟触发，不适合日历触发器），展开结果超过 100 条也会被拒绝
 api_feedback.py /api/feedback，工单是全屋共享的（看板/skills/tasks 是"读共享写自己"，feedback 是"读写都共享"）
 feedback_scanner.py  独立脚本（不被 server.py 引用），定时跑，见下方专节
 static/         每个页面一个 html+js；dashboard.css 是全站共用样式表（不只是 dashboard 用）
 ```
+
+## 已知踩过的坑
+
+**`#detail-overlay` / `#detail-panel` 的 z-index**（session 详情、skill 编辑器、task 日志、feedback 对话线程共用同一套弹层组件）：`#detail-overlay` 设了 `z-index: 10`，但 `#detail-panel` 原来没设 z-index（默认 `auto`）——按 CSS 层叠规则，`auto`/`0` 层叠上下文早于正数 z-index 绘制，所以哪怕 `#detail-panel` 在 DOM 里排在后面，视觉上"看起来在前面"，实际点击/拖选事件全被 `#detail-overlay` 挡在上层截胡了。表现就是：面板里的 textarea 点不进去、选不了文字、复制不了——四个功能模块（看板/skills/tasks/feedback）用的是同一个弹层组件，所以这个 bug 一次性影响了全部详情页。修复：给 `#detail-panel` 显式设 `z-index: 11`（比 overlay 高）+ `user-select: text`。**以后凡是新加一个用到 `#detail-overlay`+`#detail-panel` 的弹层，都要确认面板的 z-index 高于 overlay**，这类"看起来对但点不动"的问题很容易被当成 JS bug 去排查，其实是纯 CSS 层叠问题。
 
 ## 路由约定（写新 API 时follow这个）
 

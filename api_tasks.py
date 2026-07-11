@@ -4,6 +4,7 @@ import plistlib
 import subprocess
 import sys
 
+import crontab
 import users
 from routes import ApiError, route
 
@@ -109,6 +110,7 @@ def list_tasks(match, query, body, session, resp):
                 "desc": reg["desc"] if reg else "",
                 "type": reg["type"] if reg else ("scheduled" if schedule else "daemon"),
                 "schedule": schedule,
+                "cron": crontab.launchd_to_cron(schedule) if schedule else None,
                 "log": reg["log"] if reg else None,
                 "status": status,
                 "pid": pid,
@@ -163,21 +165,20 @@ def set_schedule(match, query, body, session, resp):
     _require_owner(session, owner_user)
     user, path = _find_task(owner_user, label)
 
-    hour = (body or {}).get("hour")
-    minute = (body or {}).get("minute")
-    weekday = (body or {}).get("weekday")
-    if hour is None or minute is None:
-        raise ApiError(400, "hour and minute required")
+    cron_expr = ((body or {}).get("cron") or "").strip()
+    if not cron_expr:
+        raise ApiError(400, "cron required (5 fields: minute hour dom month dow)")
+    try:
+        intervals = crontab.cron_to_launchd(cron_expr)
+    except crontab.CrontabError as e:
+        raise ApiError(400, str(e))
 
     with open(path, "rb") as f:
         plist_data = plistlib.load(f)
     if "StartCalendarInterval" not in plist_data:
         raise ApiError(400, "this task has no schedule (not a scheduled-type task)")
 
-    interval = {"Hour": int(hour), "Minute": int(minute)}
-    if weekday is not None:
-        interval["Weekday"] = int(weekday)
-    plist_data["StartCalendarInterval"] = interval
+    plist_data["StartCalendarInterval"] = intervals[0] if len(intervals) == 1 else intervals
 
     try:
         with open(path, "wb") as f:
@@ -187,4 +188,4 @@ def set_schedule(match, query, body, session, resp):
 
     _launchctl_for_user(user["uid"], ["unload", "-w", path])
     _launchctl_for_user(user["uid"], ["load", "-w", path])
-    return {"ok": True, "schedule": interval}
+    return {"ok": True, "cron": cron_expr, "schedule": plist_data["StartCalendarInterval"]}
